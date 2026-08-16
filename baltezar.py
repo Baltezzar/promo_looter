@@ -75,7 +75,7 @@ def start_polling():
     print("Ожидаю символы...")
     while True:
         fetch_chars()
-        time.sleep(1)   
+        time.sleep(0.2)   
 
 threading.Thread(target=start_polling, daemon=True).start()
 keyboard.add_hotkey('f1', on_f1)
