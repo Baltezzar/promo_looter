@@ -13,9 +13,11 @@ buffer = [] # накапливаем символы пока не наберём
 # Флаги
 is_pasted = False # флаг чтобы один раз вставлялся ctrl + v при спаме 
 
+sent_at = 0.0
+
 # Функция получения символов от основного сервера
 def fetch_chars():
-    global buffer, is_pasted
+    global buffer, is_pasted, sent_at
     try:
         response = requests.get(f"{SERVER_URL}/get")
         data = response.json()
@@ -47,7 +49,7 @@ def fetch_chars():
 
 
 def on_ctrl_v():
-    global is_pasted
+    global is_pasted, sent_at
 
     if is_pasted:
         return
