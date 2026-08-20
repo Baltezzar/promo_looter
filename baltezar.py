@@ -5,86 +5,119 @@ import pyperclip
 import keyboard
 import threading
 import time
-import pyautogui
+import win32con
+import win32api
+from collections import deque # deque - двусторонняя очередь и быстрее чем list
 
-SERVER_URL = "https://promo-looter.onrender.com"
-char_count = 1
-buffer = [] # накапливаем символы пока не наберём нужное кол-во
-# Флаги
-is_pasted = False # флаг чтобы один раз вставлялся ctrl + v при спаме 
+SERVER_PYTHON = "https://Baltezar.eu.pythonanywhere.com"
 
-sent_at = 0.0
+SERVER_RENDER = "https://promo-looter.onrender.com"
+
+SERVER_URL = SERVER_PYTHON # бесплатный Render сервер
+
+char_count = 1 # кол-во символом при разовом выводе, сейчас 1 символ 
+
+char_queue = deque() # создаем объект очереди где каждый объект внутри знает своего соседа 
+                     # очередь deque отличается от обычного list списка тем, что list при pop(0) при удалении сдвигает весь список влево что очень долго, а этот объектная очередь сдвигает указатель а не физический объект что быстрее в разы
+
+is_active = False # флаг активности программы
+
+is_pasting = False # флаг для замка чтобы выполнялось сначала копирование а потом вставка
+
 
 # Функция получения символов от основного сервера
 def fetch_chars():
-    global buffer, is_pasted, sent_at
+    global sent_at
     try:
         response = requests.get(f"{SERVER_URL}/get")
         data = response.json()
         chars = data["chars"]
         if len(chars) > 0:
-            item = chars[0] # первый элемент это словарь
-            buffer.extend([item["char"]]) # extend в отличии от append добавляет не один элемент, а сразу список 
-            sent_at = item["sent_at"]
-            if len(buffer) >= char_count:
-                result = "".join(buffer[:char_count]) # берём только нужное кол-во символов
-                                                      # символ ":" - означает от начала и до char_count, а join() склеивает символы типа 'a', 'b' в одну строку - 'ab' потому что "" стоит пере join, "".join()... если поставить так: "-".join(['a', 'b']) -> a-b 
-                buffer.clear()
-                pyperclip.copy(result) # кладем в буфер обмена
-                is_pasted = False # сбрасываем флаг - новый символ пришёл, можно вставлять
-                delay = time.time() - sent_at
-                print(f"В буфере: {result} | Задержка до буфера: {delay*1000:.0f}мс")
+            for item in chars: # перебираем все символы
+                char_queue.append({ # заполняем словарь очереди символов
+                    "char": item["char"] # непосредственно сам символ
+                })
+            received = [item["char"] for item in chars] # создаем список item["char"] перебирая каждый item в chars
+            print(f"Получено: {', '.join(received)} | В очереди: {len(char_queue)}") # и через join() склеиваем через запятую с пробелом каждый символ который пришел    
     except Exception as e:
         print(f"Ошибка получения: {e}")      
 
-
-# def on_ctrl_v():
-#     global is_pasted
-#     if is_pasted:
-#         return False # Блокируем повторное нажатие
-#     if pyperclip.paste() != "":
-#         is_pasted = True
-#         return True
-#     return False 
-
-
 def on_ctrl_v():
-    global is_pasted, sent_at
+    global is_pasting
 
-    if is_pasted:
+    if not is_active or is_pasting or not char_queue: # если прога выключена (флаг is_active == False), нет очереди (список пустой char_queue = [] == False) и замок на вставку False (is_pasting == False) то не выполняем тело функции
         return
 
-    if pyperclip.paste() == "":
-        return
+    is_pasting = True
 
-    is_pasted = True
-    paste_delay = time.time() - sent_at # нужно sent_at сделать глобальной
-    print(f"Задержка до вставки: {paste_delay*1000:.0f}мс")
-    pyautogui.hotkey("ctrl", "v")
+    item = char_queue.popleft()
+    result = item["char"]
+
+    print(f"Вставляю: {result} | Осталось: {len(char_queue)}")
+
+    threading.Thread(target=_do_paste, args=(result,), daemon=True).start() # создаем поток (хотя можно и без него) чтобы другие клавишы если нажать одновременно не зависали
+ 
+
+def _do_paste(result):
+    global is_pasting
+    try:
+        pyperclip.copy(result)
+        time.sleep(0.05)
+        win32api.keybd_event(win32con.VK_CONTROL, 0, 0, 0)
+        win32api.keybd_event(ord('V'), 0, 0, 0)
+        win32api.keybd_event(ord('V'), 0, win32con.KEYEVENTF_KEYUP, 0)
+        win32api.keybd_event(win32con.VK_CONTROL, 0, win32con.KEYEVENTF_KEYUP, 0)
+        time.sleep(0.05)
+    finally:
+        is_pasting = False
 
 
-# Функция нажатия на f1 - очистка буфера обмена
-def on_f1():
-    global buffer, is_pasted
-    buffer.clear()
-    is_pasted = False
-    pyperclip.copy("") # Очищаем буфер обмена копируя пустоту
+# Нажимаем f2 и включаем/выключаем скрипт
+def on_f2():
+    global is_active, is_pasting
+    is_active = not is_active
+    is_pasting = False # 
+    status = "включен" if is_active else "выключен"
+    print(f"Скрипт {status}")
+    if status == "включен":
+        print("Ожидаю символы...")
+
+    
+    keyboard.remove_hotkey("ctrl+v") # выключаем скрипт и удаляем кнопки чтобы переназначить супрессор заново сгенерировав
+
+    if is_active: # если прога активная, то супрессор включен
+        keyboard.add_hotkey("ctrl+v", on_ctrl_v, suppress=True)
+    else: # если прога выключена, то супресор выключен и ctrl+v работает штатно
+        keyboard.add_hotkey("ctrl+v", on_ctrl_v, suppress=False)    
+
+# Функция нажатия на end - очистка буфера обмена и буфер сервера
+def on_scrolllock():
+    char_queue.clear()
+    pyperclip.copy("")
+    try:
+       requests.post(f"{SERVER_URL}/clear")
+       print("Буфер очищен (локально + сервер)")
+    except Exception as e:
+       print(f"Ошибка очистки сервера: {e}")
+       
 
 # Функция-опросник, раз в секунду запрашивает данные вызывая метод fentch_chars()
 def start_polling():
-    print("Ожидаю символы...")
+    print("Прога запущена но скрипт не работает. Нажми на F2...")
     while True:
-        fetch_chars()
-        time.sleep(0.2)   
+        if is_active:
+            fetch_chars()
+        time.sleep(0.1)   
+
 
 threading.Thread(target=start_polling, daemon=True).start()
-keyboard.add_hotkey('f1', on_f1)
-# keyboard.add_hotkey('ctrl+v', on_ctrl_v, suppress=True) # suppress=True - перехватываем ctrl+v и решаем сами пускать его или нет  
+keyboard.add_hotkey('scroll lock', on_scrolllock) # supress=True поставил чтобы при нажатии не открывался браузер (там каккая-то вкладка вечно открывалась)
+keyboard.add_hotkey('f2', on_f2)
 
 keyboard.add_hotkey(
     "ctrl+v",
     on_ctrl_v,
-    suppress=True
-)
+    suppress=False # supress=True - это игнорирование нажатия на ctrl + v. То есть при нажатии сработает эта конструкция и вызоветься on_ctrl_v но физически ничего не вставиться
+)                  # по умолчанию супрессор выключен так как программа при запуске первом выключена
 
 keyboard.wait()               

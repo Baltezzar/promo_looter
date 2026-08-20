@@ -7,20 +7,11 @@ app = Flask(__name__)
 received_chars = [] # список принятых символом
 
 # роут отправки символа, кирилл будет сюда отправлять символ
-# @app.route('/send', methods=['POST']) # '' символы неформально для простых строк, ключей, словарей и внутреннего кода, в то время как "" - для строк которые читает человек, сообщений, текста. f строки практически всегда пишут через двойные кавычки
-# def receive_char():
-#     data = request.json
-#     char = data["char"] # получаем символ из словаря
-#     received_chars.append(char) # global received_chars не нужен потому что метод append() добавляет элементы не меняя переменную, а вот с cler() нужно потому что изменяет саму переменную
-#     print(f"Получен символ: {char}")
-#     return {'status': 'ok'}
-
-@app.route('/send', methods=['POST'])
+@app.route('/send', methods=['POST']) # '' символы неформально для простых строк, ключей, словарей и внутреннего кода, в то время как "" - для строк которые читает человек, сообщений, текста. f строки практически всегда пишут через двойные кавычки
 def receive_char():
-    data = request.json
-    received_chars.append({
-        "char": data["char"],
-        "sent_at": data["sent_at"]
+    data = request.json # получаем символ и время из словаря
+    received_chars.append({ # global received_chars не нужен потому что метод append() добавляет элементы не меняя переменную, а вот с cler() нужно потому что изменяет саму переменную
+        "char": data["char"]
     })
     return {'status': 'ok'}
 
@@ -36,6 +27,14 @@ def get_chars():
     chars = received_chars.copy() # сначала копируем список received_chars, то есть chars как и received_chars но отдельный...
     received_chars.clear() # ... а потом удаляем элементы. Если не скопировать chars а просто сделать chars = received_chars, то после clear() у нас 2 списка: chars и received_chars окажутся стёртыми потому что указывают на один и тот же участок в памяти
     return {'chars': chars}
+
+# Роут для очистки буфера символов на сервере по нажатию на клавишу f1
+@app.route('/clear', methods=['POST'])
+def clear_chars():
+    global receiver_chars
+    received_chars.clear() # очищаем буфер сервера
+    print("Буфер сервера очищен")
+    return {'status': 'ok'}
 
 
 if __name__ == '__main__': # эта конструкция нужна чтобы при импорте случайно скрипт не сработал, то есть в переменную __main__ автоматически вставится название файла, а при импорте будет уже вставляться название файла импорта и конструкция не сработает

